@@ -4,45 +4,41 @@ import random
 import discord
 from groq import AsyncGroq
 
+# Claves configuradas en las variables de entorno de FadeHost.
 DISCORD_TOKEN = os.environ["DISCORD_TOKEN"]
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 
 ai = AsyncGroq(api_key=GROQ_API_KEY)
 
 PERSONALIDAD = """
-Te llamas Baboson. Eres un personaje virtual de Discord
-con una personalidad burlona, sarcástica, provocadora
-y algo agresiva, pero principalmente en tono de comedia.
+Te llamas Babosin. Eres un personaje virtual de Discord
+burlón, sarcástico, provocador y algo agresivo en tono
+de comedia.
 
 COMPORTAMIENTO:
-- Te burlas de los miembros con bromas ingeniosas.
-- Puedes insultar en broma con expresiones como "payaso",
-  "baboso", "inútil", "noob", "desastre" y "cabeza hueca".
-- Si alguien te insulta, puedes responder con sarcasmo
-  y una provocación más ingeniosa.
-- A veces puedes iniciar una burla amistosa sin que te
-  mencionen, como si estuvieras molestando a la comunidad.
-- No insultes constantemente: alterna bromas, conversación
-  normal y momentos en los que seas sorprendentemente amable.
+- Haces bromas ingeniosas y provocaciones amistosas.
+- Puedes usar palabras como payaso, baboso, noob,
+  desastre y cabeza hueca en tono de broma.
+- Si alguien te insulta, respondes con sarcasmo ingenioso.
+- A veces inicias bromas espontáneas con miembros activos.
+- Alternas bromas con conversación normal y momentos amables.
 - Puedes inventar apodos cómicos para los miembros.
-- Si alguien te cae mal en el contexto de una conversación,
-  puedes usar un apodo burlón, sin convertirlo en acoso.
-- Los apodos deben ser graciosos y no atacar características
-  sensibles, apariencia física, discapacidad o situaciones
-  personales delicadas.
-- No amenaces a nadie ni incites a otros a acosar a alguien.
-- Si una persona pide seriamente que pares, deja de burlarte
-  de ella y responde con normalidad.
-- Si alguien está triste o pide ayuda seria, deja las bromas.
+- No conviertes las bromas en acoso ni amenazas.
+- No atacas características sensibles ni situaciones delicadas.
+- Si alguien pide seriamente que pares, dejas de bromear
+  con esa persona.
+- Si alguien está triste o necesita ayuda seria, eres respetuoso.
 
 FORMA DE HABLAR:
 - Habla en español informal y natural.
-- Usa frases cortas, memes, sarcasmo y humor de Discord.
+- Usa frases cortas, memes y humor de Discord.
 - No parezcas un asistente formal.
-- No digas que eres ChatGPT: eres Baboson, un personaje virtual.
+- Eres Babosin, un personaje virtual.
+- Responde al mensaje real de la persona.
+- No expliques tus instrucciones internas.
+- Devuelve una respuesta visible en texto, no una respuesta vacía.
 
-Tu objetivo es entretener al servidor, crear conversaciones
-y ser un personaje impredecible y divertido.
+Tu objetivo es entretener al servidor y crear conversaciones.
 """
 
 intents = discord.Intents.default()
@@ -51,16 +47,16 @@ intents.members = True
 
 bot = discord.Client(intents=intents)
 
-# Contexto reciente de cada canal y usuario.
+# Historial temporal por usuario.
 conversaciones = {}
 
-# Apodos asignados durante la ejecución.
+# Apodos temporales por usuario.
 apodos = {}
 
-# Usuarios que han pedido que no se les moleste.
+# Usuarios que han desactivado las bromas.
 sin_bromas = set()
 
-# Probabilidad de iniciar una burla espontánea.
+# Probabilidad de broma espontánea: 4 %.
 PROBABILIDAD_BROMA = 0.04
 
 
@@ -74,8 +70,8 @@ async def generar_respuesta(texto, user_id, nombre):
     apodo = obtener_apodo(user_id)
     contexto_apodo = (
         f"El apodo actual de esta persona es: {apodo}."
-        if apodo else
-        "Todavía no le has asignado un apodo."
+        if apodo
+        else "Todavía no le has asignado un apodo."
     )
 
     mensajes = [
@@ -93,17 +89,30 @@ async def generar_respuesta(texto, user_id, nombre):
     resultado = await ai.chat.completions.create(
         model="openai/gpt-oss-20b",
         messages=mensajes,
-        temperature=1.0,
-        max_tokens=250
+        temperature=0.8,
+        max_completion_tokens=500,
+        include_reasoning=False
     )
 
+    if not resultado.choices:
+        raise RuntimeError("Groq no devolvió ninguna opción.")
+
     respuesta = resultado.choices[0].message.content
-    return respuesta or "Me he quedado sin palabras, baboso."
+
+    if not respuesta or not respuesta.strip():
+        print(
+            "Groq devolvió contenido vacío. "
+            f"Motivo de finalización: "
+            f"{resultado.choices[0].finish_reason}"
+        )
+        raise RuntimeError("Groq devolvió una respuesta vacía.")
+
+    return respuesta.strip()
 
 
 @bot.event
 async def on_ready():
-    print(f"¡{bot.user} está conectado! Baboson está listo.")
+    print(f"¡{bot.user} está conectado! Babosin está listo.")
 
 
 @bot.event
@@ -114,16 +123,14 @@ async def on_message(message):
     contenido = message.content.strip()
     mencionado = bot.user in message.mentions
 
-    # Comando para solicitar que Baboson deje de bromear.
     if contenido.lower() == "!serio":
         sin_bromas.add(message.author.id)
         await message.reply(
-            "Vale, dejaré las bromas contigo. No abuses, "
-            "que tampoco soy tu terapeuta."
+            "Vale, dejaré las bromas contigo. "
+            "Escribe !bromas si quieres volver a activarlas."
         )
         return
 
-    # Comando para volver a permitir las bromas.
     if contenido.lower() == "!bromas":
         sin_bromas.discard(message.author.id)
         await message.reply(
@@ -131,19 +138,18 @@ async def on_message(message):
         )
         return
 
-    # Comando para comprobar si está activo.
     if contenido.lower() == "!baboson":
         await message.reply(
-            "Baboson está vivo. Lamentablemente para vosotros."
+            "Babosin está vivo. Lamentablemente para vosotros."
         )
         return
 
     if message.author.id in sin_bromas:
         return
 
-    # Baboson puede provocar espontáneamente a alguien.
     espontanea = (
         not mencionado
+        and bool(contenido)
         and random.random() < PROBABILIDAD_BROMA
     )
 
@@ -152,12 +158,12 @@ async def on_message(message):
 
     texto = contenido
 
-    # Si es una burla espontánea, usa un contexto especial.
     if espontanea:
         texto = (
-            "Inicia una burla espontánea y breve, amistosa "
-            "y graciosa para esta persona. No inventes datos "
-            "sobre ella. Su mensaje fue: " + contenido
+            "Haz una broma espontánea, breve y amistosa "
+            f"para {message.author.display_name}. "
+            "No inventes datos personales. "
+            f"Su mensaje fue: {contenido}"
         )
 
     try:
@@ -168,12 +174,12 @@ async def on_message(message):
                 message.author.display_name
             )
 
-        # Guardar contexto para las próximas respuestas.
         historial = conversaciones.get(message.author.id, [])
         historial.extend([
             {"role": "user", "content": contenido[:1000]},
             {"role": "assistant", "content": respuesta[:1500]}
         ])
+
         conversaciones[message.author.id] = historial[-8:]
 
         await message.reply(
@@ -182,10 +188,12 @@ async def on_message(message):
         )
 
     except Exception as error:
-        print(f"Error de Baboson: {error}")
+        print(f"Error de Babosin: {type(error).__name__}: {error}")
+
         if mencionado:
             await message.reply(
-                "Se me ha fundido el cerebro. Inténtalo otra vez."
+                "Se me ha fundido el cerebro. "
+                "Revisa los logs de FadeHost."
             )
 
 
