@@ -91,7 +91,7 @@ async def generar_respuesta(texto, user_id, nombre):
     ]
 
     resultado = await ai.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model="openai/gpt-oss-20b",
         messages=mensajes,
         temperature=1.0,
         max_tokens=250
